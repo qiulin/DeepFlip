@@ -113,7 +113,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       const viewState = state.viewStates[key];
       if (!viewState || !bookData) return state;
 
-      const pageInfo = bookData.isFixedLayout ? section : pageinfo;
+      const pageInfo = section;
       const progress: [number, number] = [pageInfo.current + 1, pageInfo.total];
       const progressPct = Math.round((progress[0] / progress[1]) * 100);
 

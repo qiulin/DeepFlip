@@ -241,12 +241,12 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
 
   const toc = bookData?.bookDoc?.toc ?? [];
   const progressVal =
-    progress && progress.pageinfo.total > 0 ? progress.page : 0;
+    progress && progress.section.total > 0 ? progress.page : 0;
   const progressMax =
-    progress && progress.pageinfo.total > 0 ? progress.pageinfo.total : 100;
+    progress && progress.section.total > 0 ? progress.section.total : 100;
   const progressPct =
-    progress && progress.pageinfo.total > 0
-      ? Math.round((progress.page / progress.pageinfo.total) * 100)
+    progress && progress.section.total > 0
+      ? Math.round((progress.page / progress.section.total) * 100)
       : null;
 
   return (
@@ -273,7 +273,7 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
         <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
           {progress && (
             <span>
-              {progress.page} / {progress.pageinfo.total}
+              {progress.page} / {progress.section.total}
               {progressPct !== null && ` (${progressPct}%)`}
             </span>
           )}
