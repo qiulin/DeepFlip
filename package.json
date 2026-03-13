@@ -1,0 +1,13 @@
+{
+  "name": "deepflip",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @deepflip/reader dev",
+    "build": "pnpm --filter @deepflip/reader build",
+    "preview": "pnpm --filter @deepflip/reader preview",
+    "typecheck": "pnpm --filter @deepflip/reader typecheck"
+  },
+  "packageManager": "pnpm@10.32.1"
+}
