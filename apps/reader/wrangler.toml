@@ -1,0 +1,21 @@
+name = "deepflip"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".output/public"
+
+[build]
+command = "pnpm build"
+
+# Environment variables (override in Cloudflare dashboard for production)
+[vars]
+ENVIRONMENT = "production"
+
+# KV namespaces (optional - for future sync features)
+# [[kv_namespaces]]
+# binding = "DEEPFLIP_KV"
+# id = "your-kv-namespace-id"
+
+# R2 bucket (optional - for future book storage)
+# [[r2_buckets]]
+# binding = "DEEPFLIP_BOOKS"
+# bucket_name = "deepflip-books"

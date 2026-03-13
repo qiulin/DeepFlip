@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Base Resets ---- */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+}
+
+/* ---- Foliate viewer ---- */
+.foliate-viewer-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+foliate-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- Reader layout ---- */
+.reader-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.reader-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+}
+
+.reader-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.toc-sidebar, .search-panel {
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+/* ---- Library card hover effects ---- */
+.card:hover {
+  transform: translateY(-2px);
+}

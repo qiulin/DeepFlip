@@ -1,0 +1,9 @@
+node_modules/
+.output/
+.nitro/
+dist/
+.cache/
+.vinxi/
+*.tsbuildinfo
+*.timestamp_*.js
+*.timestamp_*.mjs
