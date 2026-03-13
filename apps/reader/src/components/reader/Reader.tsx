@@ -7,6 +7,10 @@ import { useLibraryStore } from '@/store/libraryStore';
 import { commandRegistry, CORE_COMMANDS } from '@/services/commandRegistry';
 import type { CommandContext } from '@/services/commandRegistry';
 import FoliateViewer from './FoliateViewer';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
+import { Loader2 } from 'lucide-react';
 
 interface ReaderProps {
   bookId: string;
@@ -156,8 +160,6 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
 
   // ------------------------------------------------------------------
   // Key handler forwarded into the book content document (inner iframe)
-  // Keyboard events inside foliate's shadow DOM don't bubble to the main
-  // document, so we attach this handler to each loaded content document.
   // ------------------------------------------------------------------
   const handleContentKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -173,13 +175,12 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
   // ------------------------------------------------------------------
   const handleReaderAreaClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      // Ignore clicks on the TOC / search panel or the viewer overlay buttons
       const target = e.target as HTMLElement;
       if (target.closest('.toc-sidebar, .search-panel, .nav-btn')) return;
 
       const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
       const relX = e.clientX - rect.left;
-      const zoneWidth = rect.width * 0.25; // 25% zone on each side
+      const zoneWidth = rect.width * 0.25;
 
       if (relX < zoneWidth) {
         goToPrev();
@@ -214,16 +215,16 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
   if (!book) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <p className="text-gray-500">Book not found</p>
+        <p className="text-muted-foreground">Book not found</p>
       </div>
     );
   }
 
   if (viewState?.loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <span className="loading loading-spinner loading-lg"></span>
-        <p className="ml-4 text-gray-500">Loading {book.title}…</p>
+      <div className="flex items-center justify-center h-screen gap-3">
+        <Loader2 className="animate-spin h-6 w-6 text-muted-foreground" />
+        <p className="text-muted-foreground">Loading {book.title}…</p>
       </div>
     );
   }
@@ -231,55 +232,45 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
   if (viewState?.error) {
     return (
       <div className="flex items-center justify-center h-screen flex-col gap-4">
-        <p className="text-error text-lg">Failed to load book</p>
-        <p className="text-gray-400 text-sm">{viewState.error}</p>
-        <button className="btn btn-primary" onClick={() => navigate({ to: '/library' })}>
-          Back to Library
-        </button>
+        <p className="text-destructive text-lg">Failed to load book</p>
+        <p className="text-muted-foreground text-sm">{viewState.error}</p>
+        <Button onClick={() => navigate({ to: '/library' })}>Back to Library</Button>
       </div>
     );
   }
 
   const toc = bookData?.bookDoc?.toc ?? [];
+  const progressVal =
+    progress && progress.pageinfo.total > 0 ? progress.page : 0;
+  const progressMax =
+    progress && progress.pageinfo.total > 0 ? progress.pageinfo.total : 100;
   const progressPct =
     progress && progress.pageinfo.total > 0
       ? Math.round((progress.page / progress.pageinfo.total) * 100)
       : null;
 
   return (
-    <div className="reader-page flex flex-col h-screen bg-base-100">
+    <div className="reader-page flex flex-col h-screen bg-background">
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="reader-header flex items-center justify-between px-4 py-2 bg-base-200 border-b border-base-300 z-10">
-        <div className="flex items-center gap-2">
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => navigate({ to: '/library' })}
-            title="Back to Library"
-          >
+      <div className="reader-header flex items-center justify-between px-4 py-2 bg-card border-b border-border z-10">
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={() => navigate({ to: '/library' })} title="Back to Library">
             ← Back
-          </button>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowTOC((v) => !v)}
-            title="Table of Contents (Ctrl+T)"
-          >
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowTOC((v) => !v)} title="Table of Contents (Ctrl+T)">
             ≡ Contents
-          </button>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowSearch((v) => !v)}
-            title="Search (Ctrl+F)"
-          >
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowSearch((v) => !v)} title="Search (Ctrl+F)">
             🔍
-          </button>
+          </Button>
         </div>
 
         <div className="text-center flex-1 truncate px-4">
           <span className="font-semibold text-sm truncate">{book.title}</span>
-          {book.author && <span className="text-gray-400 text-xs ml-2">{book.author}</span>}
+          {book.author && <span className="text-muted-foreground text-xs ml-2">{book.author}</span>}
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-gray-400 tabular-nums">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
           {progress && (
             <span>
               {progress.page} / {progress.pageinfo.total}
@@ -293,12 +284,10 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
       <div className="reader-body flex flex-1 overflow-hidden">
         {/* TOC Sidebar */}
         {showTOC && (
-          <div className="toc-sidebar w-64 bg-base-200 border-r border-base-300 overflow-y-auto flex-shrink-0">
-            <div className="p-3 border-b border-base-300 flex items-center justify-between">
+          <div className="toc-sidebar w-64 bg-card border-r border-border overflow-y-auto flex-shrink-0">
+            <div className="p-3 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-sm">Contents</h3>
-              <button className="btn btn-ghost btn-xs" onClick={() => setShowTOC(false)}>
-                ✕
-              </button>
+              <Button variant="ghost" size="xs" onClick={() => setShowTOC(false)}>✕</Button>
             </div>
             <TOCList items={toc} onItemClick={handleTOCItemClick} />
           </div>
@@ -353,17 +342,13 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
 
         {/* Search Panel */}
         {showSearch && (
-          <div className="search-panel w-72 bg-base-200 border-l border-base-300 flex-shrink-0">
-            <div className="p-3 border-b border-base-300 flex items-center justify-between">
+          <div className="search-panel w-72 bg-card border-l border-border flex-shrink-0">
+            <div className="p-3 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-sm">Search</h3>
-              <button className="btn btn-ghost btn-xs" onClick={() => setShowSearch(false)}>
-                ✕
-              </button>
+              <Button variant="ghost" size="xs" onClick={() => setShowSearch(false)}>✕</Button>
             </div>
-            <div className="p-3">
-              <input
-                type="text"
-                className="input input-bordered input-sm w-full"
+            <div className="p-3 space-y-2">
+              <Input
                 placeholder="Search in book…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -382,8 +367,9 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
                   if (e.key === 'Escape') setShowSearch(false);
                 }}
                 autoFocus
+                className="h-8 text-sm"
               />
-              <p className="text-xs text-gray-400 mt-2">Press Enter to search</p>
+              <p className="text-xs text-muted-foreground">Press Enter to search</p>
             </div>
           </div>
         )}
@@ -391,35 +377,38 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
 
       {/* ── Footer progress bar ─────────────────────────────────── */}
       {progress && (
-        <div className="reader-footer px-4 py-1 bg-base-200 border-t border-base-300 flex items-center gap-3">
-          {/* Prev / Next buttons always visible in the footer for easy access */}
-          <button
-            className="btn btn-ghost btn-xs font-bold text-base leading-none"
+        <div className="reader-footer px-4 py-1 bg-card border-t border-border flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="xs"
+            className="font-bold text-base leading-none"
             onClick={goToPrev}
             title="Previous page (←)"
             aria-label="Previous page"
           >
             ‹
-          </button>
-          <progress
-            className="progress progress-primary flex-1 h-1.5 cursor-pointer"
-            value={progress.page}
-            max={progress.pageinfo.total}
+          </Button>
+          <div
+            className="flex-1 cursor-pointer"
+            title="Click to jump to position"
             onClick={(e) => {
-              const rect = (e.currentTarget as HTMLProgressElement).getBoundingClientRect();
+              const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
               const frac = (e.clientX - rect.left) / rect.width;
               getView(bookKey)?.goToFraction(frac);
             }}
-            title="Click to jump to position"
-          />
-          <button
-            className="btn btn-ghost btn-xs font-bold text-base leading-none"
+          >
+            <Progress value={progressVal} max={progressMax} className="h-1.5" />
+          </div>
+          <Button
+            variant="ghost"
+            size="xs"
+            className="font-bold text-base leading-none"
             onClick={goToNext}
             title="Next page (→)"
             aria-label="Next page"
           >
             ›
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -434,15 +423,15 @@ interface TOCItemProps {
 }
 
 const TOCList: React.FC<TOCItemProps> = ({ items, onItemClick, depth = 0 }) => {
-  if (!items.length) return <p className="p-3 text-sm text-gray-400">No table of contents</p>;
+  if (!items.length) return <p className="p-3 text-sm text-muted-foreground">No table of contents</p>;
   return (
-    <ul className="menu menu-xs">
+    <ul className="py-1">
       {items.map((item, i) => (
         <li key={i}>
           <button
-            className="text-left text-sm py-1 hover:bg-base-300 rounded w-full"
+            className="text-left text-sm py-1.5 hover:bg-accent hover:text-accent-foreground rounded w-full px-3 transition-colors"
             onClick={() => onItemClick(item.href)}
-            style={{ paddingLeft: `${depth * 12 + 8}px` }}
+            style={{ paddingLeft: `${depth * 12 + 12}px` }}
           >
             {item.label}
           </button>

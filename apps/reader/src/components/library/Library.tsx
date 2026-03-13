@@ -1,8 +1,14 @@
 
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import { Loader2 } from 'lucide-react';
 import { useLibraryStore } from '@/store/libraryStore';
 import type { Book } from '@/types/book';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 const ACCEPTED_BOOK_EXTS = ['.epub', '.pdf', '.mobi', '.azw', '.azw3', '.cbz', '.fb2', '.fbz', '.txt'];
 
@@ -153,25 +159,22 @@ const Library: React.FC = () => {
 
   return (
     <div
-      className="library-page min-h-screen bg-base-100"
+      className="min-h-screen bg-background"
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
       {/* Header */}
-      <header className="navbar bg-base-200 border-b border-base-300 px-4">
-        <div className="flex-1">
-          <span className="text-xl font-bold">📚 DeepFlip</span>
-        </div>
-        <div className="flex-none gap-2">
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-          >
-            {importing ? <span className="loading loading-spinner loading-xs" /> : '+ Import'}
-          </button>
-        </div>
+      <header className="flex items-center justify-between px-4 py-3 bg-card border-b border-border">
+        <span className="text-xl font-bold">📚 DeepFlip</span>
+        <Button
+          size="sm"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={importing}
+        >
+          {importing ? <Loader2 className="animate-spin" /> : null}
+          {importing ? 'Importing…' : '+ Import'}
+        </Button>
       </header>
 
       <input
@@ -185,29 +188,29 @@ const Library: React.FC = () => {
 
       {/* Drag-over overlay */}
       {dragOver && (
-        <div className="fixed inset-0 bg-primary/20 border-4 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
+        <div className="fixed inset-0 bg-primary/10 border-4 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
           <p className="text-2xl font-bold text-primary">Drop books here to import</p>
         </div>
       )}
 
       {/* Error alert */}
       {importError && (
-        <div className="alert alert-error mx-4 mt-4">
-          <span>Import error: {importError}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setImportError(null)}>✕</button>
+        <div className="mx-4 mt-4">
+          <Alert variant="destructive" className="flex items-center justify-between">
+            <AlertDescription>Import error: {importError}</AlertDescription>
+            <Button variant="ghost" size="xs" onClick={() => setImportError(null)}>✕</Button>
+          </Alert>
         </div>
       )}
 
       {/* Library grid */}
       <main className="p-4">
         {sortedLibrary.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground">
             <span className="text-6xl">📖</span>
             <p className="text-xl font-semibold">Your library is empty</p>
             <p className="text-sm">Import an ebook (EPUB, PDF, MOBI…) to get started</p>
-            <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
-              Import a Book
-            </button>
+            <Button onClick={() => fileInputRef.current?.click()}>Import a Book</Button>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -239,11 +242,14 @@ const BookCard: React.FC<BookCardProps> = ({ book, onOpen, onDelete }) => {
 
   return (
     <div
-      className="card card-compact bg-base-200 shadow hover:shadow-lg cursor-pointer transition-all group relative"
+      className={cn(
+        'book-card relative rounded-lg border bg-card text-card-foreground shadow-sm',
+        'cursor-pointer hover:shadow-md transition-all group overflow-hidden',
+      )}
       onClick={() => onOpen(book)}
     >
       {/* Cover */}
-      <figure className="aspect-[2/3] overflow-hidden bg-base-300">
+      <div className="aspect-[2/3] overflow-hidden bg-muted">
         {book.coverImageUrl ? (
           <img
             src={book.coverImageUrl}
@@ -255,34 +261,36 @@ const BookCard: React.FC<BookCardProps> = ({ book, onOpen, onDelete }) => {
             <span className="text-4xl">📖</span>
           </div>
         )}
-      </figure>
+      </div>
 
-      <div className="card-body p-2">
+      <div className="p-2 space-y-1">
         <h3 className="text-xs font-semibold leading-tight line-clamp-2 min-h-[2rem]">
           {book.title}
         </h3>
         {book.author && (
-          <p className="text-xs text-gray-400 truncate">{book.author}</p>
+          <p className="text-xs text-muted-foreground truncate">{book.author}</p>
         )}
-        <div className="flex items-center gap-1 mt-1">
-          <span className="badge badge-xs badge-ghost">{book.format}</span>
+        <div className="flex items-center gap-1 flex-wrap">
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{book.format}</Badge>
           {book.readingStatus === 'finished' && (
-            <span className="badge badge-xs badge-success">Done</span>
+            <Badge variant="success" className="text-[10px] px-1.5 py-0 h-4">Done</Badge>
           )}
         </div>
         {progress > 0 && (
-          <progress className="progress progress-primary h-1 mt-1" value={progress} max={100} />
+          <Progress value={progress} max={100} className="h-1 mt-1" />
         )}
       </div>
 
       {/* Delete button */}
-      <button
-        className="absolute top-1 right-1 btn btn-xs btn-circle btn-error opacity-0 group-hover:opacity-100 transition-opacity z-10"
+      <Button
+        variant="destructive"
+        size="icon"
+        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity z-10 rounded-full text-xs"
         onClick={(e) => onDelete(book, e)}
         title="Delete book"
       >
         ✕
-      </button>
+      </Button>
     </div>
   );
 };
