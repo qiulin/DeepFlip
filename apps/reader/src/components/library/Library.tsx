@@ -23,7 +23,18 @@ const Library: React.FC = () => {
         const { getWebAppService } = await import('@/services/webAppService');
         const svc = await getWebAppService();
         const books = await svc.loadLibraryBooks();
-        setLibrary(books);
+        // Restore cover image URLs from IndexedDB — blob: URLs are
+        // session-scoped and are not persisted to localStorage.
+        const booksWithCovers = await Promise.all(
+          books.map(async (book) => {
+            if (!book.coverImageUrl) {
+              const url = await svc.loadCoverImageUrl(book.hash);
+              return url ? { ...book, coverImageUrl: url } : book;
+            }
+            return book;
+          }),
+        );
+        setLibrary(booksWithCovers);
       } catch (err) {
         console.error('Failed to load library:', err);
       } finally {
@@ -77,6 +88,8 @@ const Library: React.FC = () => {
             const coverBlob = await bookDoc.getCover();
             if (coverBlob) {
               book.coverImageUrl = URL.createObjectURL(coverBlob);
+              // Persist the cover binary so it can be restored after page refresh
+              await svc.saveCoverImage(book.hash, coverBlob);
             }
           } catch {
             // metadata extraction is best-effort

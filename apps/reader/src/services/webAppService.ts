@@ -281,6 +281,16 @@ const DEFAULT_VIEW_SETTINGS: ViewSettings = {
 const LIBRARY_KEY = 'deepflip-library';
 const SETTINGS_KEY = 'deepflip-settings';
 
+/**
+ * Returns null when the value is a session-scoped `blob:` URL that must not
+ * be persisted.  `blob:` URLs are invalidated on page refresh, so we strip
+ * them before writing to localStorage and restore them from IndexedDB later.
+ */
+function stripBlobUrl(url: string | null | undefined): string | null {
+  if (!url) return url ?? null;
+  return url.startsWith('blob:') ? null : url;
+}
+
 export class WebAppService implements AppService {
   fs = indexedDBFileSystem;
   osPlatform: OsPlatform = 'unknown';
@@ -368,6 +378,33 @@ export class WebAppService implements AppService {
         // ignore
       }
     }
+    // Remove persisted cover image
+    try {
+      await this.fs.removeFile(`cover-${book.hash}`, 'Data');
+    } catch {
+      // ignore — cover may not have been saved
+    }
+  }
+
+  /**
+   * Persist a cover image blob to IndexedDB so it survives page refresh.
+   */
+  async saveCoverImage(hash: string, blob: Blob): Promise<void> {
+    const buffer = await blob.arrayBuffer();
+    await this.fs.writeFile(`cover-${hash}`, 'Data', buffer);
+  }
+
+  /**
+   * Restore a persisted cover image as a fresh blob: URL.
+   * Returns null when no cover has been saved for this book.
+   */
+  async loadCoverImageUrl(hash: string): Promise<string | null> {
+    try {
+      const buffer = (await this.fs.readFile(`cover-${hash}`, 'Data', 'binary')) as ArrayBuffer;
+      return URL.createObjectURL(new Blob([buffer]));
+    } catch {
+      return null;
+    }
   }
 
   async loadBookConfig(book: Book): Promise<BookConfig> {
@@ -402,7 +439,13 @@ export class WebAppService implements AppService {
   }
 
   async saveLibraryBooks(books: Book[]): Promise<void> {
-    localStorage.setItem(LIBRARY_KEY, JSON.stringify(books));
+    // blob: URLs are session-scoped and must NOT be persisted.  They are
+    // reconstructed from IndexedDB on the next page load.
+    const serializable = books.map((b) => ({
+      ...b,
+      coverImageUrl: stripBlobUrl(b.coverImageUrl),
+    }));
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(serializable));
   }
 
   getCoverImageUrl(book: Book): string {
