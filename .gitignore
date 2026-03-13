@@ -6,3 +6,4 @@ dist/
 .vinxi/
 *.tsbuildinfo
 .pnpm-store/
+package-lock.json
