@@ -18,7 +18,9 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
   const [showTOC, setShowTOC] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const keyHandlerRef = useRef<((e: KeyboardEvent) => void) | null>(null);
+  // Track whether the navigation overlays should be visible
+  const [showNavHint, setShowNavHint] = useState(false);
+  const navHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { library } = useLibraryStore();
   const { booksData } = useBookDataStore();
@@ -51,25 +53,44 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
 
-  // Register keyboard commands
+  // ------------------------------------------------------------------
+  // Navigation helpers — used by both keyboard shortcuts and click zones
+  // ------------------------------------------------------------------
+  const goToPrev = useCallback(() => {
+    getView(bookKey)?.prev();
+  }, [bookKey, getView]);
+
+  const goToNext = useCallback(() => {
+    getView(bookKey)?.next();
+  }, [bookKey, getView]);
+
+  // ------------------------------------------------------------------
+  // Register keyboard commands via CommandRegistry
+  // ------------------------------------------------------------------
   useEffect(() => {
     const ctx: CommandContext = { bookKey };
 
-    // Register core commands
     const disposers = [
       commandRegistry.registerCommand({
         id: CORE_COMMANDS.NAVIGATE_NEXT,
         label: 'Next Page',
         category: 'navigation',
         shortcut: 'arrowright',
-        handler: () => getView(bookKey)?.next(),
+        handler: goToNext,
       }),
       commandRegistry.registerCommand({
         id: CORE_COMMANDS.NAVIGATE_PREV,
         label: 'Previous Page',
         category: 'navigation',
         shortcut: 'arrowleft',
-        handler: () => getView(bookKey)?.prev(),
+        handler: goToPrev,
+      }),
+      commandRegistry.registerCommand({
+        id: CORE_COMMANDS.NAVIGATE_NEXT,
+        label: 'Next Page (Space)',
+        category: 'navigation',
+        shortcut: ' ',
+        handler: goToNext,
       }),
       commandRegistry.registerCommand({
         id: CORE_COMMANDS.TOGGLE_TOC,
@@ -121,17 +142,66 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
       }),
     ];
 
-    const keyHandler = (e: KeyboardEvent) => {
+    // Outer document keyboard handler (catches keys when focus is outside the view)
+    const outerKeyHandler = (e: KeyboardEvent) => {
       commandRegistry.handleKeyboardShortcut(e, ctx);
     };
-    document.addEventListener('keydown', keyHandler);
-    keyHandlerRef.current = keyHandler;
+    document.addEventListener('keydown', outerKeyHandler);
 
     return () => {
-      document.removeEventListener('keydown', keyHandler);
+      document.removeEventListener('keydown', outerKeyHandler);
       for (const dispose of disposers) dispose();
     };
-  }, [bookKey, getView]);
+  }, [bookKey, getView, goToNext, goToPrev]);
+
+  // ------------------------------------------------------------------
+  // Key handler forwarded into the book content document (inner iframe)
+  // Keyboard events inside foliate's shadow DOM don't bubble to the main
+  // document, so we attach this handler to each loaded content document.
+  // ------------------------------------------------------------------
+  const handleContentKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      const ctx: CommandContext = { bookKey };
+      commandRegistry.handleKeyboardShortcut(e, ctx);
+    },
+    [bookKey],
+  );
+
+  // ------------------------------------------------------------------
+  // Click-to-navigate: clicking the left quarter turns the page back;
+  // clicking the right quarter turns it forward.
+  // ------------------------------------------------------------------
+  const handleReaderAreaClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      // Ignore clicks on the TOC / search panel or the viewer overlay buttons
+      const target = e.target as HTMLElement;
+      if (target.closest('.toc-sidebar, .search-panel, .nav-btn')) return;
+
+      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+      const relX = e.clientX - rect.left;
+      const zoneWidth = rect.width * 0.25; // 25% zone on each side
+
+      if (relX < zoneWidth) {
+        goToPrev();
+      } else if (relX > rect.width - zoneWidth) {
+        goToNext();
+      }
+    },
+    [goToPrev, goToNext],
+  );
+
+  // Show navigation hints briefly on mouse move
+  const handleMouseMove = useCallback(() => {
+    setShowNavHint(true);
+    if (navHintTimerRef.current) clearTimeout(navHintTimerRef.current);
+    navHintTimerRef.current = setTimeout(() => setShowNavHint(false), 2000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (navHintTimerRef.current) clearTimeout(navHintTimerRef.current);
+    };
+  }, []);
 
   const handleTOCItemClick = useCallback(
     (href: string) => {
@@ -171,10 +241,14 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
   }
 
   const toc = bookData?.bookDoc?.toc ?? [];
+  const progressPct =
+    progress && progress.pageinfo.total > 0
+      ? Math.round((progress.page / progress.pageinfo.total) * 100)
+      : null;
 
   return (
     <div className="reader-page flex flex-col h-screen bg-base-100">
-      {/* Header */}
+      {/* ── Header ──────────────────────────────────────────────── */}
       <div className="reader-header flex items-center justify-between px-4 py-2 bg-base-200 border-b border-base-300 z-10">
         <div className="flex items-center gap-2">
           <button
@@ -182,14 +256,14 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
             onClick={() => navigate({ to: '/library' })}
             title="Back to Library"
           >
-            ←
+            ← Back
           </button>
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => setShowTOC((v) => !v)}
             title="Table of Contents (Ctrl+T)"
           >
-            ≡
+            ≡ Contents
           </button>
           <button
             className="btn btn-ghost btn-sm"
@@ -199,15 +273,23 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
             🔍
           </button>
         </div>
-        <div className="text-center flex-1 truncate">
+
+        <div className="text-center flex-1 truncate px-4">
           <span className="font-semibold text-sm truncate">{book.title}</span>
           {book.author && <span className="text-gray-400 text-xs ml-2">{book.author}</span>}
         </div>
-        <div className="text-xs text-gray-400 tabular-nums">
-          {progress && `${progress.page} / ${progress.pageinfo.total}`}
+
+        <div className="flex items-center gap-3 text-xs text-gray-400 tabular-nums">
+          {progress && (
+            <span>
+              {progress.page} / {progress.pageinfo.total}
+              {progressPct !== null && ` (${progressPct}%)`}
+            </span>
+          )}
         </div>
       </div>
 
+      {/* ── Body ────────────────────────────────────────────────── */}
       <div className="reader-body flex flex-1 overflow-hidden">
         {/* TOC Sidebar */}
         {showTOC && (
@@ -222,8 +304,12 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
           </div>
         )}
 
-        {/* Book Content */}
-        <div className="reader-content flex-1 relative">
+        {/* ── Reading area ──────────────────────────────────────── */}
+        <div
+          className="reader-content flex-1 relative select-none"
+          onClick={handleReaderAreaClick}
+          onMouseMove={handleMouseMove}
+        >
           {viewState?.viewerKey && bookData?.bookDoc && viewSettings && (
             <FoliateViewer
               key={viewState.viewerKey}
@@ -232,8 +318,37 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
               lastLocation={bookData.config.location}
               viewSettings={viewSettings}
               viewerKey={viewState.viewerKey}
+              onContentKeyDown={handleContentKeyDown}
             />
           )}
+
+          {/* Prev page button — left edge overlay */}
+          <button
+            className={`nav-btn absolute left-0 top-0 h-full w-12 flex items-center justify-center
+              text-2xl text-white bg-transparent transition-opacity duration-300 z-10
+              hover:bg-black/10 focus:outline-none
+              ${showNavHint ? 'opacity-60' : 'opacity-0'}`}
+            style={{ cursor: 'w-resize' }}
+            onClick={(e) => { e.stopPropagation(); goToPrev(); }}
+            aria-label="Previous page"
+            title="Previous page (← or click)"
+          >
+            ‹
+          </button>
+
+          {/* Next page button — right edge overlay */}
+          <button
+            className={`nav-btn absolute right-0 top-0 h-full w-12 flex items-center justify-center
+              text-2xl text-white bg-transparent transition-opacity duration-300 z-10
+              hover:bg-black/10 focus:outline-none
+              ${showNavHint ? 'opacity-60' : 'opacity-0'}`}
+            style={{ cursor: 'e-resize' }}
+            onClick={(e) => { e.stopPropagation(); goToNext(); }}
+            aria-label="Next page"
+            title="Next page (→ or click)"
+          >
+            ›
+          </button>
         </div>
 
         {/* Search Panel */}
@@ -256,7 +371,12 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
                   if (e.key === 'Enter' && searchQuery.trim()) {
                     const view = getView(bookKey);
                     if (view) {
-                      void view.search({ scope: 'book', matchCase: false, matchWholeWords: false, query: searchQuery });
+                      void view.search({
+                        scope: 'book',
+                        matchCase: false,
+                        matchWholeWords: false,
+                        query: searchQuery,
+                      });
                     }
                   }
                   if (e.key === 'Escape') setShowSearch(false);
@@ -269,21 +389,44 @@ const Reader: React.FC<ReaderProps> = ({ bookId }) => {
         )}
       </div>
 
-      {/* Footer progress bar */}
+      {/* ── Footer progress bar ─────────────────────────────────── */}
       {progress && (
-        <div className="reader-footer px-4 py-1 bg-base-200 border-t border-base-300">
+        <div className="reader-footer px-4 py-1 bg-base-200 border-t border-base-300 flex items-center gap-3">
+          {/* Prev / Next buttons always visible in the footer for easy access */}
+          <button
+            className="btn btn-ghost btn-xs font-bold text-base leading-none"
+            onClick={goToPrev}
+            title="Previous page (←)"
+            aria-label="Previous page"
+          >
+            ‹
+          </button>
           <progress
-            className="progress progress-primary w-full h-1"
+            className="progress progress-primary flex-1 h-1.5 cursor-pointer"
             value={progress.page}
             max={progress.pageinfo.total}
+            onClick={(e) => {
+              const rect = (e.currentTarget as HTMLProgressElement).getBoundingClientRect();
+              const frac = (e.clientX - rect.left) / rect.width;
+              getView(bookKey)?.goToFraction(frac);
+            }}
+            title="Click to jump to position"
           />
+          <button
+            className="btn btn-ghost btn-xs font-bold text-base leading-none"
+            onClick={goToNext}
+            title="Next page (→)"
+            aria-label="Next page"
+          >
+            ›
+          </button>
         </div>
       )}
     </div>
   );
 };
 
-// TOC list component
+// ── TOC list component ──────────────────────────────────────────────
 interface TOCItemProps {
   items: import('@/libs/document').TOCItem[];
   onItemClick: (href: string) => void;
@@ -297,14 +440,18 @@ const TOCList: React.FC<TOCItemProps> = ({ items, onItemClick, depth = 0 }) => {
       {items.map((item, i) => (
         <li key={i}>
           <button
-            className={`text-left text-sm py-1 hover:bg-base-300 rounded px-2 w-full ${depth > 0 ? 'pl-' + (depth * 4 + 2) : ''}`}
+            className="text-left text-sm py-1 hover:bg-base-300 rounded w-full"
             onClick={() => onItemClick(item.href)}
             style={{ paddingLeft: `${depth * 12 + 8}px` }}
           >
             {item.label}
           </button>
           {item.subitems && item.subitems.length > 0 && (
-            <TOCList items={item.subitems as import('@/libs/document').TOCItem[]} onItemClick={onItemClick} depth={depth + 1} />
+            <TOCList
+              items={item.subitems as import('@/libs/document').TOCItem[]}
+              onItemClick={onItemClick}
+              depth={depth + 1}
+            />
           )}
         </li>
       ))}

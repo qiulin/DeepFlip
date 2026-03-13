@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useCallback } from 'react';
-import type { FoliateView, wrappedFoliateView as wrapView } from '@/types/view';
+import type { FoliateView } from '@/types/view';
 import type { BookDoc, TOCItem } from '@/libs/document';
 import type { ViewSettings, PageInfo, TimeInfo } from '@/types/book';
 import { useReaderStore } from '@/store/readerStore';
@@ -11,6 +11,8 @@ interface FoliateViewerProps {
   lastLocation?: string;
   viewSettings: ViewSettings;
   viewerKey: string;
+  /** Optional handler forwarded into each loaded content document for keyboard events */
+  onContentKeyDown?: (e: KeyboardEvent) => void;
 }
 
 // Register the foliate-view custom element if not already registered
@@ -62,15 +64,20 @@ const FoliateViewer: React.FC<FoliateViewerProps> = ({
   lastLocation,
   viewSettings,
   viewerKey,
+  onContentKeyDown,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<FoliateView | null>(null);
+  // Keep a ref so the load handler always sees the latest callback
+  const onContentKeyDownRef = useRef(onContentKeyDown);
+  useEffect(() => { onContentKeyDownRef.current = onContentKeyDown; }, [onContentKeyDown]);
+
   const { setView, setViewInited, setIsLoading, setProgress } = useReaderStore();
 
   const handleRelocate = useCallback(
     (event: Event) => {
       const e = event as CustomEvent;
-      const { cfi, fraction, location, section, pageinfo, time } = e.detail ?? {};
+      const { cfi, location, section, pageinfo, time } = e.detail ?? {};
       if (!viewRef.current) return;
 
       const tocItems: TOCItem[] = (bookDoc.toc as TOCItem[] | undefined) ?? [];
@@ -101,7 +108,7 @@ const FoliateViewer: React.FC<FoliateViewerProps> = ({
         total: time?.total ?? 0,
       };
 
-      // Get range from CFI
+      // Get range from CFI for annotation support
       let range: Range = document.createRange();
       try {
         const resolved = viewRef.current.resolveCFI(cfi);
@@ -113,7 +120,7 @@ const FoliateViewer: React.FC<FoliateViewerProps> = ({
           }
         }
       } catch {
-        // ignore range resolution errors
+        // Ignore range resolution errors (e.g. on first load before CFI is set)
       }
 
       setProgress(bookKey, cfi ?? '', tocItem, sectionInfo, pageinfoData, timeinfoData, range);
@@ -134,6 +141,7 @@ const FoliateViewer: React.FC<FoliateViewerProps> = ({
       view = document.createElement('foliate-view') as FoliateView;
       view.style.width = '100%';
       view.style.height = '100%';
+      view.style.display = 'block';
 
       // Apply renderer attributes
       const attrs = buildRendererAttrs(viewSettings);
@@ -144,26 +152,38 @@ const FoliateViewer: React.FC<FoliateViewerProps> = ({
       containerRef.current.appendChild(view);
       viewRef.current = view;
 
-      // Listen to events
+      // Listen to relocate events (position changes)
       view.addEventListener('relocate', handleRelocate);
 
-      view.addEventListener('load', () => {
+      // When a section document is loaded, forward keyboard events to the outer handler.
+      // This is necessary because foliate-js renders content in shadow-DOM iframes
+      // whose keyboard events do NOT bubble to the main document.
+      view.addEventListener('load', (evt: Event) => {
         if (!mounted) return;
         setViewInited(bookKey, true);
         setIsLoading(bookKey, false);
+
+        // Attach keyboard listener to the inner content document
+        const detail = (evt as CustomEvent).detail as { doc?: Document } | undefined;
+        const doc = detail?.doc;
+        if (doc) {
+          doc.addEventListener('keydown', (e: KeyboardEvent) => {
+            onContentKeyDownRef.current?.(e);
+          });
+        }
       });
 
-      // Open the book
+      // Open the book document
       try {
         await view.open(bookDoc);
         if (!mounted) return;
 
-        // Initialize with last location
-        if (lastLocation) {
-          view.init({ lastLocation });
-        }
+        // Always call init() — with the saved location when available, or from
+        // the beginning for a new book.  Without this call the renderer never
+        // navigates to the first page and the reading area stays blank.
+        await view.init(lastLocation ? { lastLocation } : {});
 
-        // Apply user styles
+        // Apply user-defined styles
         const css = buildUserStylesheet(viewSettings);
         if (css && view.renderer.setStyles) {
           view.renderer.setStyles(css);
@@ -185,20 +205,20 @@ const FoliateViewer: React.FC<FoliateViewerProps> = ({
         try {
           view.close();
         } catch {
-          // ignore
+          // ignore cleanup errors
         }
         view.remove();
         viewRef.current = null;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewerKey]); // re-init when viewerKey changes
+  }, [viewerKey]); // Re-initialize only when the viewerKey changes (book/settings recreate)
 
   return (
     <div
       ref={containerRef}
       className="foliate-viewer-container"
-      style={{ width: '100%', height: '100%', overflow: 'hidden' }}
+      style={{ width: '100%', height: '100%', overflow: 'hidden', display: 'block' }}
     />
   );
 };

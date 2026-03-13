@@ -7,7 +7,7 @@ type RangeAnchor = (doc: Document) => Range;
 export interface FoliateView extends HTMLElement {
   open: (book: unknown) => Promise<void>;
   close: () => void;
-  init: (options: { lastLocation: string }) => void;
+  init: (options: { lastLocation?: string; showTextStart?: boolean }) => Promise<void>;
   goTo: (href: string) => void;
   goToFraction: (fraction: number) => void;
   prev: (distance?: number) => void;
