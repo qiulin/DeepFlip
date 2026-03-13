@@ -1,4 +1,3 @@
-'use client';
 
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';

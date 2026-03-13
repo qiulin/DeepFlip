@@ -1,4 +1,3 @@
-'use client';
 
 import React, { useEffect, useRef, useCallback } from 'react';
 import type { FoliateView, wrappedFoliateView as wrapView } from '@/types/view';
